@@ -4,11 +4,27 @@ from database import init_db
 from database import get_db_connection
 from flask_login import(LoginManager, UserMixin,login_user, logout_user,login_required,current_user)
 
+from flask_cors import CORS
+from functools import wraps
+import os
+
 app=Flask(__name__)
+
+app.config["SECRET_KEY"] = os.environ.get(
+    "SECRET_KEY",
+    "development-secret-change-this"
+)
+
 app.config["SESSION_COOKIE_HTTPONLY"]=True
 app.config["SESSION_COOKIE_SAMESITE"]="Lax"
+app.config["SESSION_COOKIE_SECURE"] = False
 
-app.secret_key="vishwani_trekking-app"
+CORS(
+    app,
+    supports_credentials=True,
+    origins=["http://localhost:5173"]
+)
+
 init_db()
 
 login_manager=LoginManager()
@@ -63,6 +79,28 @@ def load_user(user_id):
             )      
         return None
 
+def role_required(required_role):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if not current_user.is_authenticated:
+               return jsonify({
+                    "success": False,
+                    "message": "Please login first"
+                }), 401
+
+            if current_user.role != required_role:
+                return jsonify({
+                    "success": False,
+                    "message": "You are not authorized"
+                }), 403
+
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+                
 
 @app.route("/")
 def home():
@@ -97,35 +135,334 @@ def register_user():
         return redirect("/login/user")
     return render_template("register_user.html")
 
-@app.route("/register/staff", methods=["GET", "POST"])
-def register_staff():
-    if request.method=="POST":
-        name=request.form["name"]
-        email=request.form["email"]
-        password=request.form["password"]
-        conn=get_db_connection()
 
-        if len(name)<3:
-            return "Name must be at least 3 characters"
-        if len(password)<4:
-            return "Password must be at least 4 characters"
-        
-        check=conn.execute("""
-        select * from staff where email=?""",(email,)).fetchone()
+@app.route("/api/auth/register", methods=["POST"])
+def api_register():
+    data=request.get_json(silent=True) or {}
+    name=data.get("name", "").strip()
+    email=data.get("email", "").strip()
+    password=data.get("password", "")
 
-        if check:
-            conn.close()
-            return "Email already registered"
-        
-        password=generate_password_hash(password)
-        conn.execute("""
-        insert into staff(name, email, password) values(?,?,?)
-        """, (name,email,password))
-        conn.commit()
+    if len(name)<3:
+        return jsonify({
+            "success":False,
+            "message":"name must contain atleast 3 characters"
+        }),400
+
+    if not email or "@" not in email:
+        return jsonify({
+                    "success":False,
+                    "message":"Enter a valid email"
+                }),400
+    if len(password)<8:
+            return jsonify({
+                "success":False,
+                "message":"Password must contain atleast 8 characters"
+            }),400
+    conn=get_db_connection()
+    
+    existing_user=conn.execute("""
+            select * from users where email=?""", (email,)).fetchone()
+    staff=conn.execute("""
+            select * from staff where email=?""",(email,)).fetchone()
+    if existing_user or staff:
         conn.close()
 
-        return "Registration submitted. Wait for admin approval."
-    return render_template("register_staff.html")
+        return jsonify({
+            "success": False,
+            "message": "Email already registered"
+        }), 409
+    hash_password=generate_password_hash(password)
+    conn.execute("""
+        insert into users(name, email, password) values(?,?,?)
+        """, (name,email,hash_password))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "message": "Registration successful. Please login."
+    }), 201
+
+
+# @app.route("/api/auth/register", methods=["POST"])
+# def api_register():
+#     data=request.get_json(silent=True) or {}
+#     name=data.get("name", "").strip()
+#     email=data.get("email", "").strip()
+#     password=data.get("password", "")
+
+#     if len(name)<3:
+#         return jsonify({
+#             "success":False,
+#             "message":"name must contain atleast 3 characters"
+#         }),400
+
+#     if not email or "@" not in email:
+#         return jsonify({
+#                     "success":False,
+#                     "message":"Enter a valid email"
+#                 }),400
+#     if len(password)<8:
+#             return jsonify({
+#                 "success":False,
+#                 "message":"Password must contain atleast 8 characters"
+#             }),400
+#     conn=get_db_connection()
+    
+#     existing_user=conn.execute("""
+#             select * from users where email=?""", (email,)).fetchone()
+#     staff=conn.execute("""
+#             select * from staff where email=?""",(email,)).fetchone()
+#     if existing_user or staff:
+#         conn.close()
+
+#         return jsonify({
+#             "success": False,
+#             "message": "Email already registered"
+#         }), 409
+#     hash_password=generate_password_hash(password)
+#     conn.execute("""
+#         insert into users(name, email, password) values(?,?,?)
+#         """, (name,email,hash_password))
+
+#     conn.commit()
+#     conn.close()
+
+#     return jsonify({
+#         "success": True,
+#         "message": "Registration successful. Please login."
+#     }), 201
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_login():
+    data=request.get_json(silent=True) or {}
+    role = data.get("role").strip().lower()
+    name=data.get("name", "").strip()
+    email=data.get("email", "").strip()
+    password=data.get("password", "")
+    
+    if not password:
+        return jsonify({
+            "success":False,
+            "message":"Password is required"
+        }),400
+
+    if role not in ("user", "staff", "admin"):
+        return jsonify({
+            "success": False,
+            "message": "Invalid role"
+        }), 400
+    
+    conn=get_db_connection()
+    account=None
+    valid_password=False
+    logged_user=None
+    if(role=="user"):
+        account=conn.execute("""
+                select * from users where email=?""", (email,)).fetchone()
+        
+        if account and account["status"] == "Blacklisted":
+            conn.close()
+
+            return jsonify({
+                "success": False,
+                "message": "Your account has been blacklisted"
+            }), 403
+        if account:
+            if account["status"] == "Blacklisted":
+                conn.close()
+                return jsonify({
+                    "success": False,
+                    "message": "Your account has been blacklisted"
+                }), 403
+
+            valid_password = check_password_hash(
+                account["password"], password
+            )
+
+            if valid_password:
+                logged_user = User(
+                    account["user_id"],
+                    account["name"],
+                    account["email"],
+                    "user"
+                )
+    elif role=="staff":
+        account = conn.execute("""
+            SELECT * FROM staff WHERE email=?
+        """, (email,)).fetchone()
+
+        if account is None:
+            conn.close()
+            return jsonify({
+                "success": False,
+                "message": "Staff account not found"
+            }), 401
+
+        if account["approval_status"] != "Approved":
+            conn.close()
+
+            return jsonify({
+                "success": False,
+                "message": "Your staff account is not approved"
+            }), 403
+
+        if account["status"] == "Blacklisted":
+            conn.close()
+
+            return jsonify({
+                "success": False,
+                "message": "Your account has been blacklisted"
+            }), 403
+
+        valid_password = check_password_hash(
+            account["password"], password
+        )
+
+        if valid_password:
+            logged_user = User(
+                f"staff-{account['staff_id']}",
+                account["name"],
+                account["email"],
+                "staff"
+            )
+    
+    elif role == "admin":
+        username = data.get("username", "").strip()
+
+        account = conn.execute("""
+            SELECT * FROM admins WHERE username=?
+        """, (username,)).fetchone()
+
+        if account:
+            valid_password = check_password_hash(
+                account["password"], password
+            )
+
+            if valid_password:
+                logged_user = User(
+                    f"admin-{account['admin_id']}",
+                    account["username"],
+                    account["email"] if "email" in account.keys() else "",
+                    "admin"
+                )
+
+
+    else:
+        conn.close()
+
+        return jsonify({
+            "success": False,
+            "message": "Invalid role"
+        }), 400
+
+    conn.close()
+
+    if account is None or not valid_password:
+        return jsonify({
+            "success": False,
+            "message": "Invalid credentials"
+        }), 401
+
+    login_user(logged_user)
+
+    dashboard_routes = {
+        "user": "/dashboard/trekker",
+        "staff": "/dashboard/staff",
+        "admin": "/dashboard/admin"
+    }
+
+    return jsonify({
+        "success": True,
+        "message": "Login successful",
+        "user": {
+            "id": str(logged_user.id),
+            "name": logged_user.name,
+            "email": logged_user.email,
+            "role": logged_user.role
+        },
+        "redirect": dashboard_routes[logged_user.role]
+    }), 200
+
+@app.route("/api/auth/me", methods=["GET"])
+def api_current_user():
+    if not current_user.is_authenticated:
+        return jsonify({
+            "authenticated":False
+        }),401
+    return jsonify({
+        "authenticated":True,
+        "user":{
+            "id":str(current_user.id),
+            "name":current_user.name,
+            "email":current_user.email,
+            "role":current_user.role
+        }
+    })
+
+@app.route("/api/auth/logout", methods=["POST"])
+@login_required
+def api_logout():
+
+    logout_user()
+
+    return jsonify({
+        "success": True,
+        "message": "Logged out successfully"
+    })
+
+@app.route("/api/admin/staff/create", methods=["POST"])
+@role_required("admin")
+def api_create_staff():
+    data=request.get_json(silent=True) or {}
+    name=data.get("name", "").strip()
+    email=data.get("email", "").strip()
+    password=data.get("password", "")
+
+    if len(name)<3:
+        return jsonify({
+            "success":False,
+            "message":"Invalid staff name"
+        }),400
+
+    if not email or "@" not in email:
+        return jsonify({
+                    "success":False,
+                    "message":"Enter a valid email"
+                }),400
+    if len(password)<8:
+            return jsonify({
+                "success":False,
+                "message":"Password must contain atleast 8 characters"
+            }),400
+    conn=get_db_connection()
+    
+    existing_user=conn.execute("""
+            select user_id from users where email=?""", (email,)).fetchone()
+    staff=conn.execute("""
+            select staff_id from staff where email=?""",(email,)).fetchone()
+    if existing_user or staff:
+        conn.close()
+
+        return jsonify({
+            "success": False,
+            "message": "Email already exists"
+        }), 409
+    hash_password=generate_password_hash(password)
+    conn.execute("""
+        insert into staff(name, email, password, approval_status,status) values(?,?,?,'Approved','Active')
+        """, (name,email,hash_password))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "message": "Staff account created successfully"
+    }), 201
+
 
 
 @app.route("/login/user", methods=["GET","POST"])
@@ -1037,262 +1374,6 @@ def close_booking(trek_id):
 def logout():
     logout_user()
     return redirect("/")
-
-
-@app.route("/api/treks", methods=["GET"])
-def api_get_treks():
-    conn=get_db_connection()
-    treks=conn.execute("""
-    select * from treks""").fetchall()
-    conn.close()
-    result=[]
-    for trek in treks:
-        result.append(dict(trek))
-
-    return jsonify(result)
-
-@app.route("/api/treks/<int:trek_id>", methods=["GET"])
-def api_get_trek(trek_id):
-    conn=get_db_connection()
-
-    trek=conn.execute("""
-        select * from treks where trek_id=?""",(trek_id,)).fetchone()
-    conn.close()
-
-    if trek is None:
-        return jsonify({"message":"Trek not found"}),404
-    
-    return jsonify(dict(trek))
-
-
-@app.route("/api/treks", methods=["POST"])
-def api_create_trek():
-    conn=get_db_connection()
-
-    data=request.get_json()
-    conn.execute("""
-    Insert into treks (trek_name, location, difficulty) Values(?,?,?)""",(data["trek_name"],data["location"],data["difficulty"]))
-    conn.commit()
-    conn.close()
-  
-    return jsonify({"message":"Trek created"}),201
-    
-@app.route("/api/treks/<int:trek_id>", methods=["PUT"])
-def api_update_trek(trek_id):
-    data=request.get_json()
-    conn=get_db_connection()
-
-    conn.execute("""
-        Update treks set trek_name=?, location=?, difficulty=? where trek_id=?""",
-        (data["trek_name"], data["location"], data["difficulty"], trek_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message":"updated"})
-
-@app.route("/api/treks/<int:trek_id>", methods=["DELETE"])
-def api_delete_trek(trek_id):
-    conn=get_db_connection()
-    conn.execute("""
-        delete from treks where trek_id=?""",(trek_id,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"message":"Deleted"})
-
-@app.route("/api/users", methods=["GET"])
-def api_users():
-    conn=get_db_connection()
-    users=conn.execute("""
-        select user_id,name,email,status from users""").fetchall()
-
-    conn.close()
-    return jsonify([dict(i) for i in users]) 
-
-@app.route("/api/users", methods=["POST"])
-def api_add_user():
-    conn=get_db_connection()
-
-    data=request.get_json()
-    conn.execute("""
-    Insert into users (name, email,password) Values(?,?,?)""",(data["name"],data["email"],generate_password_hash(data["password"])))
-    conn.commit()
-    conn.close()
-  
-    return jsonify({"message":"User created"}),201
-
-@app.route("/api/users/<int:user_id>", methods=["GET"])
-def api_get_user(user_id):
-    conn=get_db_connection()
-
-    user=conn.execute("""
-        select * from users where user_id=?""",(user_id,)).fetchone()
-    conn.close()
-
-    if user is None:
-        return jsonify({"message":"User not found"}),404
-    
-    return jsonify(dict(user))
-
-@app.route("/api/users/<int:user_id>", methods=["PUT"])
-def api_update_user(user_id):
-    data=request.get_json()
-    conn=get_db_connection()
-
-    conn.execute("""
-        Update users set name=?, email=?, password=? where user_id=?""",
-        (data["name"], data["email"], generate_password_hash(data["password"]), user_id))
-    conn.commit()
-    conn.close()
-    return jsonify({"message":"updated"})
-
-@app.route("/api/users/<int:user_id>", methods=["DELETE"])
-def api_delete_user(user_id):
-    conn=get_db_connection()
-    conn.execute("""
-        delete from users where user_id=?""",(user_id,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({"message":"Deleted"})
-
-@app.route("/api/bookings", methods=["GET"])
-def api_get_bookings():
-    conn=get_db_connection()
-    bookings=conn.execute("""
-    select * from bookings""").fetchall()
-    conn.close()
-    result=[]
-    for booking in bookings:
-        result.append(dict(booking))
-
-    return jsonify(result)
-
-
-@app.route("/api/bookings", methods=["POST"])
-def api_booking():
-    conn=get_db_connection()
-
-    data=request.get_json()
-    conn.execute("""
-    Insert into bookings (user_id, trek_id,status) Values(?,?,?)""",(data["user_id"],data["trek_id"],"Booked"))
-    conn.commit()
-    conn.close()
-  
-    return jsonify({"message":"Booking created"}),201
-
-@app.route("/api/bookings/<int:booking_id>", methods=["PUT"])
-def api_update_booking(booking_id):
-    data=request.get_json()
-    conn=get_db_connection()
-    booking=conn.execute("""
-        select * from bookings where booking_id=?""", (booking_id,)).fetchone()
-    if booking is None:
-        conn.close()
-        return jsonify({"message":"Booking not found"}),404
-    
-    conn.execute("""
-        update bookings set status=?, payment_status=? where booking_id=?""",
-        (data["status"], data["payment_status"], booking_id))
-    conn.commit()
-    conn.close()
-
-    return jsonify({
-        "message":"Booking updated successfully"
-    })
-
-@app.route("/api/bookings/<int:booking_id>", methods=["DELETE"])
-def api_delete_booking(booking_id):
-    
-    conn=get_db_connection()
-    booking=conn.execute("""
-        select * from bookings where booking_id=?""", (booking_id,)).fetchone()
-    if booking is None:
-        conn.close()
-        return jsonify({"message":"Booking not found"}),404
-    
-    conn.execute("""
-        delete from bookings where booking_id=?""",
-        ( booking_id,))
-    
-    conn.commit()
-    conn.close()
-
-    return jsonify({
-        "message":"Booking deleted successfully"
-    })
-
-@app.route("/admin/chart-data")
-@login_required
-def admin_chart_data():
-    if current_user.role!="admin":
-        return "unauthorized", 403
-    
-    conn=get_db_connection()
-    total_users=conn.execute("""select count(*) from users""").fetchone()[0]
-    total_staff=conn.execute("""select count(*) from staff""").fetchone()[0]
-    total_treks=conn.execute("""select count(*) from treks""").fetchone()[0]
-    total_bookings=conn.execute("""select count(*) from bookings""").fetchone()[0]
-
-    conn.close()
-    return jsonify({"labels":["Users","Staff","Treks","Bookings"], "values":[total_users,total_staff,total_treks,total_bookings]})
-
-
-@app.route("/staff/chart-data")
-@login_required
-def staff_chart():
-    if current_user.role!="staff":
-        return "unauthorized", 403
-    
-    conn=get_db_connection()
-
-    staff_id=current_user.id.replace("staff-", "")
-    rows=conn.execute("""
-        select t.trek_name, count(b.booking_id) as participants from trek_assignments ta
-            join treks t on ta.trek_id=t.trek_id 
-            left join bookings b on b.trek_id=t.trek_id
-            where ta.staff_id=?
-            group by t.trek_name""",(staff_id,)).fetchall()
-    
-    conn.close()
-    return jsonify({
-        "labels":[r["trek_name"] for r in rows],
-        "values":[r["participants"] for r in rows]
-    })
-@app.route("/user/trend-chart")
-@login_required
-def trend_chart():
-    if current_user.role!="user":
-        return "unauthorized", 403
-    conn=get_db_connection()
-    rows=conn.execute("""
-    select strftime('%Y-%m',booking_date) as month,
-    count(*) as total from bookings where user_id=?
-    group by month 
-    order by month""",(current_user.id,)).fetchall()
-
-    conn.close()
-    return jsonify({
-        "labels":[r["month"] for r in rows],
-        "values":[r["total"] for r in rows]
-    })
-
-@app.route("/user/history-chart")
-@login_required
-def history_chart():
-    if current_user.role!="user":
-        return "unauthorized", 403
-    
-    conn=get_db_connection()
-    rows=conn.execute("""
-        select t.trek_name, count(*) as visits from bookings b
-            join treks t on b.trek_id=t.trek_id where b.user_id=?
-            group by t.trek_name""",(current_user.id,)).fetchall()
-    
-    conn.close()
-    return jsonify({
-        "labels":[r["trek_name"] for r in rows],
-        "values":[r["visits"] for r in rows]
-    })
 
 
 if __name__=="__main__":

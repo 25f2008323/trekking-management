@@ -133,22 +133,45 @@ def init_db():
     foreign key(admin_id) references admins(admin_id))""")
 
 
+#     admin = conn.execute("""
+#     SELECT admin_id, password
+#     FROM admins
+#     WHERE username = 'admin'
+# """).fetchone()
+
+#     if admin:
+#         if not admin[1].startswith(("scrypt:", "pbkdf2:")):
+#             conn.execute("""
+#                 UPDATE admins
+#                 SET password = ?
+#                 WHERE admin_id = ?
+#             """, (
+#                 generate_password_hash(admin[1]),
+#                 admin[0]
+#             ))
+#     else:
+#         conn.execute("""
+#             INSERT INTO admins (username, password, email)
+#             VALUES (?, ?, ?)
+#         """, (
+#             "admin",
+#             generate_password_hash("admin123"),
+#             "admin@mail.com"
+#         ))
+
     admin = conn.execute("""
-    SELECT admin_id, password
-    FROM admins
-    WHERE username = 'admin'
-""").fetchone()
+        SELECT admin_id FROM admins WHERE username = ?
+    """, ("admin",)).fetchone()
 
     if admin:
-        if not admin[1].startswith(("scrypt:", "pbkdf2:")):
-            conn.execute("""
-                UPDATE admins
-                SET password = ?
-                WHERE admin_id = ?
-            """, (
-                generate_password_hash(admin[1]),
-                admin[0]
-            ))
+        conn.execute("""
+            UPDATE admins
+            SET password = ?
+            WHERE admin_id = ?
+        """, (
+            generate_password_hash("admin123"),
+            admin[0]
+        ))
     else:
         conn.execute("""
             INSERT INTO admins (username, password, email)
