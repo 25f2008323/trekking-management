@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>All Staff</h1>
+
+<form method="GET" class="mb-3">
+    <input
+        type="text"
+        class="form-control"
+        name="search"
+        placeholder="Search Staff Name or ID"
+        value="{{ search }}">
+</form>
+
+<div class="table-responsive">
+
+<table class="table table-bordered table-striped table-hover">
+
+<tr>
+    <th>ID</th>
+    <th>Name</th>
+    <th>Email</th>
+    <th>Approval</th>
+    <th>Status</th>
+    <th>Actions</th>
+</tr>
+
+{% for staff in staff_list %}
+
+<tr>
+
+    <td>{{ staff["staff_id"] }}</td>
+    <td>{{ staff["name"] }}</td>
+    <td>{{ staff["email"] }}</td>
+    <td>{{ staff["approval_status"] }}</td>
+    <td>{{ staff["status"] }}</td>
+
+    <td>
+
+        {% if staff["status"] == "Active" %}
+
+        <a href="/admin/staff/blacklist/{{ staff['staff_id'] }}" class="btn btn-secondary">Blacklist</a>
+
+        {% else %}
+        <a href="/admin/staff/activate/{{ staff['staff_id'] }}" class="btn btn-secondary">Activate</a>
+        {% endif %}
+
+    </td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+</div>
+<br>
+
+<a href="/admin/dashboard" class="btn btn-secondary">Back</a>
+
+{% endblock %}

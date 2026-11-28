@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>All Treks</h1>
+
+<form method="GET" class="row g-2 mb-3">
+
+    <div class="col-md-4">
+        <input type="text"
+               class="form-control"
+               name="search"
+               placeholder="Search Trek Name"
+               value="{{ search }}">
+    </div>
+
+    <div class="col-md-3">
+        <input type="text"
+               class="form-control"
+               name="location"
+               placeholder="Location"
+               value="{{ location }}">
+    </div>
+
+    <div class="col-md-3">
+        <select class="form-select" name="difficulty">
+            <option value="">All Difficulties</option>
+            <option value="Easy">Easy</option>
+            <option value="Moderate">Moderate</option>
+            <option value="Hard">Hard</option>
+        </select>
+    </div>
+
+    <div class="col-md-2">
+        <button class="btn btn-primary w-100">
+            Search
+        </button>
+    </div>
+
+</form>
+
+<table border="1">
+
+<tr>
+    <th>ID</th>
+    <th>Name</th>
+    <th>Location</th>
+    <th>Difficulty</th>
+    <th>Status</th>
+    <th>Progress</th>
+    <th>Price</th>
+    <th>Action</th>
+</tr>
+
+{% for trek in treks %}
+
+<tr>
+
+    <td>{{ trek["trek_id"] }}</td>
+    <td>{{ trek["trek_name"] }}</td>
+    <td>{{ trek["location"] }}</td>
+    <td>{{ trek["difficulty"] }}</td>
+    <td>{{ trek["status"] }}</td>
+    <td>{{ trek["progress"] }}</td>
+    <td>{{ trek["price"] }}</td>
+    <td><a href="/book/{{ trek['trek_id'] }}" class="btn btn-secondary">Book</a>
+            <a href="/admin/treks/edit/{{ trek['trek_id'] }}" class="btn btn-secondary">Edit</a>
+        |
+        <a href="/admin/treks/delete/{{ trek['trek_id'] }}" class="btn btn-secondary"> Delete</a>
+        |
+        <a href="/admin/treks/open/{{ trek['trek_id'] }}" class="btn btn-secondary">Open</a> 
+        |
+        <a href="/admin/treks/close/{{ trek['trek_id'] }}" class="btn btn-secondary">Close</a>
+        |
+
+    </td>
+
+</tr>
+
+{% endfor %}
+
+</table>
+
+{% endblock %}

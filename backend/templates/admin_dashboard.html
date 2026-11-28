@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Admin Dashboard</h1>
+
+
+<div class="row g-3">
+<div class="col-md-3">
+<div class="card text-center">
+<div class="card-body">
+
+<h5>Total Users</h5>
+<h2>{{ total_users }}</h2>
+</div>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card text-center">
+<div class="card-body">
+<h5>Total Staff</h5>
+<h2>{{ total_staff }}</h2>
+</div>
+</div>
+</div>
+
+<div class="col-md-3">
+<div class="card text-center">
+<div class="card-body">
+
+<h5>Total Treks</h5>
+<h2>{{ total_treks }}</h2>
+</div>
+</div>
+</div>
+<div class="col-md-3">
+<div class="card text-center">
+<div class="card-body">
+
+<h5>Total Bookings</h5>
+
+<h2>{{ total_bookings }}</h2>
+</div>
+</div>
+</div>
+</div>
+<div class="chart-container">
+<canvas id="adminChart"></canvas>
+</div>
+<style>
+.chart-container{
+    width: 500px;     
+    height: 300px;     
+    margin: auto;      
+}
+</style>
+<script>
+fetch("/admin/chart-data")
+.then(response => response.json())
+.then(data => {
+    new Chart(document.getElementById("adminChart"),{
+        type:"bar",
+        data:{
+            labels:data.labels,
+            datasets:[{
+                label:"Stats",
+                data:data.values
+            }]
+        }
+    });
+});
+</script>
+
+<div class="list-group">
+<a href="/admin/treks" class="btn btn-primary d-block">Manage Treks</a><br>
+<a href="/admin/treks/create" class="btn btn-primary d-block">Create Trek</a><br>
+<a href="/admin/staff" class="btn btn-primary d-block">Manage Staff</a><br>
+<a href="/admin/users" class="btn btn-primary d-block">Manage Users</a><br>
+<a href="/admin/assign" class="btn btn-primary d-block">Assign Staff To Trek</a><br>
+<a href="/admin/pending" class="btn btn-primary d-block">Pending Staff</a><br>
+<a href="/admin/trek-history"  class="btn btn-primary d-block">View Trekking History</a><br>
+<a href="/admin/bookings" class="btn btn-primary d-block">View Bookings</a><br>
+<a href="/admin/history" class="btn btn-primary d-block">View History</a><br>
+<br>
+<a href="/logout" class="btn btn-danger d-block">Logout</a>
+</div>
+
+{% endblock %}

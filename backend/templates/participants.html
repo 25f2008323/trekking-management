@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Trek Participants</h1>
+
+<a href="/staff/dashboard" class="btn btn-secondary">Dashboard</a>
+<br><br>
+
+<div class="table-responsive" cellpadding="8">
+
+<table class="table table-bordered table-striped table-hover"> 
+<tr>
+<th>Name</th>
+<th>Email</th>
+<th>Phone</th>
+<th>People</th>
+<th>Booking Status</th>
+<th>Payment</th>
+<th>Booking Date</th>
+</tr>
+{% for p in participants %}
+<tr>
+<td>{{ p["name"] }}</td>
+<td>{{ p["email"] }}</td>
+<td>{{ p["phone"] }}</td>
+<td>{{ p["number_of_people"] }}</td>
+<td>{{ p["status"] }}</td>
+<td>{{ p["payment_status"] }}</td>
+<td>{{ p["booking_date"] }}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+</div>
+
+{% endblock %}

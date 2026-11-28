@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Booking Records</h1>
+
+<div class="table-responsive">
+
+<table class="table table-bordered table-striped table-hover">
+
+<tr>
+    <th>ID</th>
+    <th>User</th>
+    <th>Trek</th>
+    <th>People</th>
+    <th>Status</th>
+    <th>Payment</th>
+</tr>
+
+{% for booking in bookings %}
+
+<tr>
+    <td>{{ booking["booking_id"] }}</td>
+    <td>{{ booking["user_name"] }}</td>
+    <td>{{ booking["trek_name"] }}</td>
+    <td>{{ booking["number_of_people"] }}</td>
+    <td>{{ booking["status"] }}</td>
+    <td>{{ booking["payment_status"] }}</td>
+</tr>
+
+{% endfor %}
+
+</table>
+</div>
+{% endblock %}

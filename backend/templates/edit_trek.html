@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Edit Trek</h1>
+
+<form method="POST">
+<div class="mb-3">
+    <input
+        name="trek_name" class="form-control" required minlength="5"
+        value="{{ trek['trek_name'] }}">
+
+    <br><br>
+    <input
+        name="location" class="form-control" required minlength="5"
+        value="{{ trek['location'] }}" >
+
+    <br><br>
+    <input
+        name="difficulty" class="form-control" required
+        value="{{ trek['difficulty'] }}" >
+
+    <br><br>
+    <input
+        name="price" class="form-control" 
+        value="{{ trek['price'] }}" required>
+
+    <br><br>
+    <button type="submit" name="action" class="btn btn-success"> Update Trek </button>
+</div>
+</form>
+{% endblock %}
